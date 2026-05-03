@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DebugAI — Code Debugging Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg:#0d0f14;--bg2:#141720;--bg3:#1c2030;--bg4:#222840;
+--accent:#4f7fff;--accent2:#7c3aed;--green:#22d3a5;--red:#f87171;--amber:#fbbf24;
+--text:#e8eaf2;--text2:#8892b0;--text3:#4a5568;
+--border:#1e2540;--border2:#2d3660;
+--font-mono:'JetBrains Mono',monospace;--font-ui:'Syne',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh;display:flex;flex-direction:column}
+.app{display:grid;grid-template-columns:260px 1fr;grid-template-rows:auto 1fr;height:100vh;overflow:hidden}
+
+.header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid var(--border);background:var(--bg2);gap:16px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:-0.3px}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round}
+.header-right{display:flex;align-items:center;gap:12px}
+.badge{font-size:11px;font-family:var(--font-mono);background:rgba(79,127,255,0.12);color:var(--accent);border:1px solid rgba(79,127,255,0.25);padding:3px 8px;border-radius:4px}
+.badge-free{font-size:11px;font-family:var(--font-mono);background:rgba(34,211,165,0.1);color:var(--green);border:1px solid rgba(34,211,165,0.25);padding:3px 8px;border-radius:4px}
+
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-section{padding:16px;border-bottom:1px solid var(--border)}
+.sidebar-label{font-size:10px;font-weight:600;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:10px}
+.lang-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lang-btn{padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-family:var(--font-mono);font-size:12px;cursor:pointer;transition:all 0.15s;text-align:center}
+.lang-btn:hover{border-color:var(--border2);color:var(--text)}
+.lang-btn.active{background:rgba(79,127,255,0.1);border-color:var(--accent);color:var(--accent)}
+
+.mode-list{display:flex;flex-direction:column;gap:4px}
+.mode-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text2);transition:all 0.15s;border:1px solid transparent}
+.mode-item:hover{background:var(--bg3);color:var(--text)}
+.mode-item.active{background:rgba(79,127,255,0.08);border-color:rgba(79,127,255,0.2);color:var(--accent)}
+.mode-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.model-select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 10px;outline:none;cursor:pointer}
+.model-select:focus{border-color:var(--accent)}
+
+.history-list{display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto}
+.history-item{padding:7px 10px;border-radius:5px;font-size:11px;font-family:var(--font-mono);color:var(--text2);cursor:pointer;border:1px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-item:hover{background:var(--bg3);color:var(--text);border-color:var(--border)}
+
+.main{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.chat-area{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+.chat-area::-webkit-scrollbar{width:4px}
+.chat-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+.msg{display:flex;gap:10px;max-width:90%}
+.msg.user{align-self:flex-end;flex-direction:row-reverse}
+.msg.assistant{align-self:flex-start}
+.msg-avatar{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:600}
+.msg.user .msg-avatar{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.msg.assistant .msg-avatar{background:var(--bg3);border:1px solid var(--border2);color:var(--green);font-size:10px}
+.msg-bubble{padding:12px 15px;border-radius:10px;font-size:13.5px;line-height:1.65}
+.msg.user .msg-bubble{background:rgba(79,127,255,0.12);border:1px solid rgba(79,127,255,0.2);border-radius:10px 3px 10px 10px;color:var(--text)}
+.msg.assistant .msg-bubble{background:var(--bg2);border:1px solid var(--border);border-radius:3px 10px 10px 10px;color:var(--text)}
+
+.code-block{margin:10px 0;background:var(--bg);border:1px solid var(--border2);border-radius:6px;overflow:hidden}
+.code-header{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--bg3);border-bottom:1px solid var(--border)}
+.code-lang{font-size:10px;font-family:var(--font-mono);color:var(--text3);letter-spacing:0.5px}
+.copy-btn{font-size:10px;font-family:var(--font-mono);color:var(--text3);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:3px;transition:all 0.15s}
+.copy-btn:hover{color:var(--accent);background:rgba(79,127,255,0.08)}
+pre{padding:12px;overflow-x:auto;font-family:var(--font-mono);font-size:12px;line-height:1.6;color:#a8b4d0}
+pre::-webkit-scrollbar{height:3px}
+pre::-webkit-scrollbar-thumb{background:var(--border2)}
+
+.thinking{display:flex;align-items:center;gap:8px;padding:12px 15px;background:var(--bg2);border:1px solid var(--border);border-radius:3px 10px 10px 10px;font-size:13px;color:var(--text2)}
+.dots{display:flex;gap:4px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite}
+.dot:nth-child(2){animation-delay:0.2s}
+.dot:nth-child(3){animation-delay:0.4s}
+@keyframes pulse{0%,80%,100%{opacity:0.2;transform:scale(0.8)}40%{opacity:1;transform:scale(1)}}
+
+.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px;text-align:center}
+.welcome-icon{width:64px;height:64px;background:linear-gradient(135deg,rgba(79,127,255,0.15),rgba(124,58,237,0.15));border:1px solid rgba(79,127,255,0.2);border-radius:16px;display:flex;align-items:center;justify-content:center}
+.welcome h2{font-size:22px;font-weight:600;letter-spacing:-0.5px}
+.welcome p{font-size:14px;color:var(--text2);max-width:400px;line-height:1.7}
+.feature-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.chip{font-size:11px;font-family:var(--font-mono);padding:5px 10px;border-radius:4px;border:1px solid var(--border2);color:var(--text2);background:var(--bg2)}
+
+.input-area{border-top:1px solid var(--border);background:var(--bg2);padding:16px}
+.input-tabs{display:flex;gap:2px;margin-bottom:10px;background:var(--bg3);border-radius:6px;padding:2px;width:fit-content}
+.tab{padding:5px 12px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.5px;cursor:pointer;color:var(--text2);transition:all 0.15s;border:none;background:none;font-family:var(--font-ui)}
+.tab.active{background:var(--bg);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-mono);font-size:12.5px;line-height:1.65;padding:12px;resize:none;outline:none;transition:border-color 0.15s;scrollbar-width:thin}
+textarea:focus{border-color:rgba(79,127,255,0.4);box-shadow:0 0 0 3px rgba(79,127,255,0.06)}
+textarea::placeholder{color:var(--text3)}
+.input-footer{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.char-count{font-size:11px;font-family:var(--font-mono);color:var(--text3)}
+.actions{display:flex;gap:8px;align-items:center}
+.btn{padding:8px 16px;border-radius:6px;font-family:var(--font-ui);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;border:none;display:flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#3d6ee0;transform:translateY(-1px)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);font-family:var(--font-ui)}
+.btn-ghost:hover{color:var(--text);background:var(--bg3)}
+.file-upload{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;padding:5px 8px;border:1px dashed var(--border2);border-radius:5px;transition:all 0.15s;font-family:var(--font-ui)}
+.file-upload:hover{border-color:var(--accent);color:var(--accent)}
+.file-upload input{display:none}
+
+/* API Key Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:28px;width:440px;max-width:92vw}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:6px}
+.modal p{font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.65}
+.modal input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:13px;padding:10px 12px;outline:none;margin-bottom:14px}
+.modal input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.modal a{color:var(--accent);text-decoration:none}
+.modal a:hover{text-decoration:underline}
+.steps{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.step{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--text2)}
+.step-num{width:20px;height:20px;border-radius:50%;background:rgba(79,127,255,0.15);border:1px solid rgba(79,127,255,0.3);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;margin-top:1px}
+
+.status-bar{display:flex;align-items:center;gap:6px;font-size:11px;font-family:var(--font-mono);color:var(--text3);padding:6px 16px;border-top:1px solid var(--border);background:var(--bg2)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:statusPulse 2s infinite;flex-shrink:0}
+@keyframes statusPulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal">
+    <h3>🔑 Connect Groq API — Free &amp; Fast</h3>
+    <p>Groq is 100% free to use. Follow these steps to get your API key:</p>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><span>Go to <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a> and sign up (free)</span></div>
+      <div class="step"><div class="step-num">2</div><span>Click <strong style="color:var(--text)">"Create API Key"</strong> and copy it</span></div>
+      <div class="step"><div class="step-num">3</div><span>Paste it below — saved locally in your browser only</span></div>
+    </div>
+    <input type="password" id="apiKeyInput" placeholder="gsk_..." autocomplete="off"/>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('apiModal').style.display='none'" style="font-size:12px">Cancel</button>
+      <button class="btn btn-primary" onclick="saveApiKey()">Save &amp; Start Debugging</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 18 18"><polyline points="4,6 1,9 4,12"/><polyline points="14,6 17,9 14,12"/><line x1="10" y1="3" x2="8" y2="15"/></svg>
+      </div>
+      DebugAI
+    </div>
+    <div class="header-right">
+      <div style="font-size:12px;color:var(--text2);font-family:var(--font-mono)" id="headerModel">llama-3.3-70b-versatile</div>
+      <div style="width:1px;height:20px;background:var(--border)"></div>
+      <div style="font-size:12px;color:var(--text2)" id="sessionCount">0 debugs this session</div>
+      <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="resetApiKey()">&#9881; Settings</button>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Language</div>
+      <div class="lang-grid" id="langGrid">
+        <div class="lang-btn active" data-lang="Python">Python</div>
+        <div class="lang-btn" data-lang="JavaScript">JS</div>
+        <div class="lang-btn" data-lang="Java">Java</div>
+        <div class="lang-btn" data-lang="C++">C++</div>
+        <div class="lang-btn" data-lang="TypeScript">TS</div>
+        <div class="lang-btn" data-lang="Go">Go</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Model</div>
+      <select class="model-select" id="modelSelect" onchange="updateModelBadge()">
+        <option value="llama-3.3-70b-versatile">Llama 3.3 70B (best)</option>
+        <option value="llama3-8b-8192">Llama 3 8B (fastest)</option>
+        <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+        <option value="gemma2-9b-it">Gemma 2 9B</option>
+      </select>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Debug Mode</div>
+      <div class="mode-list" id="modeList">
+        <div class="mode-item active" data-mode="full">
+          <div class="mode-dot" style="background:var(--accent)"></div>Full Analysis
+        </div>
+        <div class="mode-item" data-mode="explain">
+          <div class="mode-dot" style="background:var(--amber)"></div>Explain Only
+        </div>
+        <div class="mode-item" data-mode="fix">
+          <div class="mode-dot" style="background:var(--green)"></div>Fix Code
+        </div>
+        <div class="mode-item" data-mode="optimize">
+          <div class="mode-dot" style="background:var(--accent2)"></div>Optimize
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <div class="sidebar-label">History</div>
+      <div class="history-list" id="historyList">
+        <div style="font-size:11px;color:var(--text3);padding:4px 0">No history yet</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="border-bottom:none">
+      <button class="btn btn-ghost" style="width:100%;font-size:12px;justify-content:center" onclick="clearChat()">Clear Session</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="chat-area" id="chatArea">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">
+          <svg viewBox="0 0 32 32" width="36" height="36" fill="none">
+            <rect x="4" y="6" width="24" height="20" rx="3" stroke="var(--accent)" stroke-width="1.5"/>
+            <path d="M10 13l-4 3 4 3" stroke="var(--accent2)" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M22 13l4 3-4 3" stroke="var(--accent2)" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M18 11l-4 10" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h2>Code Debugging Assistant</h2>
+          <p>Powered by Groq — completely free and blazing fast. Paste your code, upload a file, or describe a bug and I'll fix it instantly.</p>
+        </div>
+        <div class="feature-chips">
+          <span class="chip">error detection</span>
+          <span class="chip">fix suggestions</span>
+          <span class="chip">code review</span>
+          <span class="chip">optimization</span>
+          <span class="chip">multi-language</span>
+          <span class="chip">100% free</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-tabs">
+        <button class="tab active" id="tabCode" onclick="switchTab('code')">Code</button>
+        <button class="tab" id="tabChat" onclick="switchTab('chat')">Chat</button>
+      </div>
+      <textarea id="codeInput" rows="6" placeholder="// Paste your code here...&#10;// Example: def factorial(n):&#10;//     return n * factorial(n-1)"></textarea>
+      <div class="input-footer">
+        <div style="display:flex;align-items:center;gap:10px">
+          <label class="file-upload">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 1v8M4 5l3-4 3 4M2 11h10"/></svg>
+            Upload file
+            <input type="file" accept=".py,.js,.java,.cpp,.ts,.go,.txt,.c,.cs,.rb,.php" onchange="handleFileUpload(this)">
+          </label>
+          <span class="char-count" id="charCount">0 chars</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost" onclick="clearInput()">Clear</button>
+          <button class="btn btn-primary" id="debugBtn" onclick="submitCode()">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="3,1 13,7 3,13"/></svg>
+            Debug
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-dot"></div>
+      <span id="statusText">Ready — paste code and hit Debug</span>
+      <span style="margin-left:auto;color:var(--text3)">Ctrl+Enter to submit</span>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedLang = 'Python';
+let selectedMode = 'full';
+let isLoading = false;
+let history = [];
+
+function getApiKey() {
+  const match = document.cookie.match(/(?:^|; )debugai_groq_key=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key.startsWith('gsk_')) { alert('Please enter a valid Groq API key (starts with gsk_)'); return; }
+  const expires = new Date();
+  expires.setFullYear(expires.getFullYear() + 1);
+  document.cookie = 'debugai_groq_key=' + encodeURIComponent(key) + '; expires=' + expires.toUTCString() + '; path=/; SameSite=Strict';
+  document.getElementById('apiModal').style.display = 'none';
+}
+function resetApiKey() {
+  document.cookie = 'debugai_groq_key=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('apiModal').style.display = 'flex';
+}
+
+window.addEventListener('load', () => {
+  if (getApiKey()) document.getElementById('apiModal').style.display = 'none';
+});
+
+function updateModelBadge() {
+  const sel = document.getElementById('modelSelect');
+  document.getElementById('headerModel').textContent = sel.value;
+}
+
+document.querySelectorAll('#langGrid .lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#langGrid .lang-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedLang = btn.dataset.lang;
+    document.getElementById('statusText').textContent = `Ready — ${selectedLang} selected`;
+  });
+});
+
+document.querySelectorAll('#modeList .mode-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('#modeList .mode-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    selectedMode = item.dataset.mode;
+  });
+});
+
+document.getElementById('codeInput').addEventListener('input', () => {
+  document.getElementById('charCount').textContent = document.getElementById('codeInput').value.length + ' chars';
+});
+
+function switchTab(tab) {
+  document.getElementById('tabCode').classList.toggle('active', tab === 'code');
+  document.getElementById('tabChat').classList.toggle('active', tab === 'chat');
+  const ta = document.getElementById('codeInput');
+  if (tab === 'code') {
+    ta.placeholder = '// Paste your code here...\n// Example: def factorial(n):\n//     return n * factorial(n-1)';
+    ta.rows = 6;
+  } else {
+    ta.placeholder = 'Ask a question about your code or describe an error...\nExample: "Why does my loop run infinitely?"';
+    ta.rows = 4;
+  }
+}
+
+function clearInput() {
+  document.getElementById('codeInput').value = '';
+  document.getElementById('charCount').textContent = '0 chars';
+}
+
+function clearChat() {
+  document.getElementById('chatArea').innerHTML = `<div class="welcome" id="welcome">
+    <div class="welcome-icon"><svg viewBox="0 0 32 32" width="36" height="36" fill="none">
+      <rect x="4" y="6" width="24" height="20" rx="3" stroke="var(--accent)" stroke-width="1.5"/>
+      <path d="M10 13l-4 3 4 3" stroke="var(--accent2)" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M22 13l4 3-4 3" stroke="var(--accent2)" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M18 11l-4 10" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round"/>
+    </svg></div>
+    <div><h2>Code Debugging Assistant</h2><p>Paste your code, upload a file, or describe a bug.</p></div>
+  </div>`;
+  history = [];
+  document.getElementById('historyList').innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">No history yet</div>';
+}
+
+function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('codeInput').value = e.target.result;
+    document.getElementById('charCount').textContent = e.target.result.length + ' chars';
+    const ext = file.name.split('.').pop().toLowerCase();
+    const langMap = {py:'Python',js:'JavaScript',java:'Java',cpp:'C++',ts:'TypeScript',go:'Go',c:'C',cs:'C#',rb:'Ruby',php:'PHP'};
+    if (langMap[ext]) {
+      document.querySelectorAll('#langGrid .lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === langMap[ext]));
+      selectedLang = langMap[ext];
+    }
+    document.getElementById('statusText').textContent = `File loaded: ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function escapeHtml(t) {
+  return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function addUserMessage(content) {
+  const w = document.getElementById('welcome'); if (w) w.remove();
+  const ca = document.getElementById('chatArea');
+  const d = document.createElement('div');
+  d.className = 'msg user';
+  d.innerHTML = `<div class="msg-avatar">U</div><div class="msg-bubble"><pre style="white-space:pre-wrap;font-family:var(--font-mono);font-size:12px;margin:0;color:var(--text)">${escapeHtml(content.slice(0,600))}${content.length>600?'\n...(truncated)':''}</pre></div>`;
+  ca.appendChild(d); ca.scrollTop = ca.scrollHeight;
+}
+
+function addThinking() {
+  const w = document.getElementById('welcome'); if (w) w.remove();
+  const ca = document.getElementById('chatArea');
+  const d = document.createElement('div');
+  d.className = 'msg assistant'; d.id = 'thinkingMsg';
+  d.innerHTML = `<div class="msg-avatar">AI</div><div class="thinking"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>Analyzing your code...</div>`;
+  ca.appendChild(d); ca.scrollTop = ca.scrollHeight;
+}
+
+function removeThinking() { const t = document.getElementById('thinkingMsg'); if (t) t.remove(); }
+
+function formatResponse(text) {
+  let html = '', inCode = false, codeLines = [], codeLang = '';
+  for (const line of text.split('\n')) {
+    if (line.startsWith('```')) {
+      if (inCode) {
+        html += `<div class="code-block"><div class="code-header"><span class="code-lang">${escapeHtml(codeLang)}</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div><pre>${escapeHtml(codeLines.join('\n'))}</pre></div>`;
+        codeLines = []; codeLang = ''; inCode = false;
+      } else { inCode = true; codeLang = line.slice(3).trim() || selectedLang; }
+    } else if (inCode) {
+      codeLines.push(line);
+    } else {
+      const l = escapeHtml(line);
+      if (l.match(/^#{1,3} /)) html += `<p style="font-weight:600;color:var(--text);margin:10px 0 4px;font-size:14px">${l.replace(/^#{1,3} /,'')}</p>`;
+      else if (l.startsWith('**') && l.endsWith('**')) html += `<p style="font-weight:600;color:var(--text);margin:6px 0 2px">${l.replace(/\*\*/g,'')}</p>`;
+      else if (l.startsWith('- ') || l.startsWith('* ')) html += `<p style="padding-left:12px;color:var(--text2);margin:2px 0">&rsaquo; ${l.slice(2)}</p>`;
+      else if (l.match(/^\d+\. /)) html += `<p style="padding-left:12px;color:var(--text2);margin:2px 0">${l}</p>`;
+      else if (l.trim() === '') html += '<div style="height:6px"></div>';
+      else html += `<p style="margin:2px 0;color:var(--text2)">${l}</p>`;
+    }
+  }
+  return html;
+}
+
+function addAssistantMessage(content) {
+  const ca = document.getElementById('chatArea');
+  const d = document.createElement('div');
+  d.className = 'msg assistant';
+  d.innerHTML = `<div class="msg-avatar">AI</div><div class="msg-bubble">${formatResponse(content)}</div>`;
+  ca.appendChild(d); ca.scrollTop = ca.scrollHeight;
+}
+
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(() => { btn.textContent = 'copied!'; setTimeout(() => btn.textContent = 'copy', 1500); });
+}
+
+function buildPrompt(code, lang, mode) {
+  const instructions = {
+    full: `Analyze this ${lang} code:\n1. Identify ALL errors (syntax, logic, runtime)\n2. Explain each error simply\n3. Provide FIXED code in a code block\n4. Suggest 2-3 improvements`,
+    explain: `Explain what this ${lang} code does and identify any errors. Be clear and simple. List any bugs found.`,
+    fix: `Find and fix all bugs in this ${lang} code. Show corrected code in a code block. Briefly explain what was wrong.`,
+    optimize: `Review this ${lang} code for performance and quality. Suggest optimizations and show the improved version in a code block.`
+  };
+  return `You are an expert code debugging assistant. ${instructions[mode]}\n\nLanguage: ${lang}\nCode:\n\`\`\`${lang.toLowerCase()}\n${code}\n\`\`\`\n\nBe concise, practical, and use clear formatting.`;
+}
+
+async function submitCode() {
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code || isLoading) return;
+  const apiKey = getApiKey();
+  if (!apiKey) { document.getElementById('apiModal').style.display = 'flex'; return; }
+
+  isLoading = true;
+  const btn = document.getElementById('debugBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<span style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite"></span> Analyzing`;
+  document.getElementById('statusText').textContent = `Sending to Groq...`;
+
+  addUserMessage(code);
+  addThinking();
+
+  const model = document.getElementById('modelSelect').value;
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 1500,
+        messages: [
+          { role: 'system', content: 'You are an expert code debugging assistant. Always format code in markdown code blocks.' },
+          { role: 'user', content: buildPrompt(code, selectedLang, selectedMode) }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    const reply = data.choices?.[0]?.message?.content || 'Sorry, could not analyze the code.';
+
+    removeThinking();
+    addAssistantMessage(reply);
+
+    const shortCode = code.slice(0, 38).replace(/\n/g, ' ') + '...';
+    history.unshift(shortCode);
+    if (history.length > 8) history.pop();
+    document.getElementById('historyList').innerHTML = history.map(h =>
+      `<div class="history-item" title="${escapeHtml(h)}">${escapeHtml(h)}</div>`
+    ).join('');
+
+    document.getElementById('statusText').textContent = `Done — ${selectedLang} analysis complete`;
+    const sc = document.getElementById('sessionCount');
+    const cur = parseInt(sc.textContent) || 0;
+    sc.textContent = (cur + 1) + ' debug' + (cur + 1 === 1 ? '' : 's') + ' this session';
+    clearInput();
+  } catch (err) {
+    removeThinking();
+    addAssistantMessage(`**Error connecting to Groq**\n\n${err.message}\n\nMake sure your API key is correct. Get one free at console.groq.com`);
+    document.getElementById('statusText').textContent = 'Error — check API key';
+  }
+
+  isLoading = false;
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="3,1 13,7 3,13"/></svg> Debug`;
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submitCode();
+});
+</script>
+</body>
+</html>
